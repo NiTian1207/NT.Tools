@@ -7,24 +7,26 @@ using System.Threading.Tasks;
 
 namespace NT.Tools
 {
+    /// <summary>
+    /// 多线程下载,暂停,断点续传
+    /// </summary>
     public class MultiDownload
     {
-        string _url;
-        string _savePath;
-        string _state;
-        int _threadNum;
-        int _threadCompleteNum;
-        long _fileSize;
-        long _downloadSize;
+        string _url;   //下载链接
+        string _savePath;   //文件保存绝对路径
+        string _state;   //下载状态
+        int _threadNum;   //线程数
+        int _threadCompleteNum;   //完成线程数
+        long _fileSize;   //文件大小
+        long _downloadedSize;   //已下载文件大小
         object locker = new object();
         bool _cancel = false;
         bool _pause = false;
-        List<Thread> _threads = new List<Thread>();
-        List<string> _tempFiles = new List<string>();
-        List<string> _uncompleteFiles = new List<string>();
-        List<long[]> _ranges = new List<long[]>();
-        List<DownloadThreadInfo> _threadInfos = new List<DownloadThreadInfo>();
-
+        List<Thread> _threads = new List<Thread>();   //下载线程组
+        List<string> _tempFiles = new List<string>();   //临时文件保存路径
+        List<string> _uncompleteFiles = new List<string>();   //未下载完成的临时文件保存路径
+        List<long[]> _ranges = new List<long[]>();   //下载分段 [0]=开始 [1]=结尾 [2]=线程序号
+        List<DownloadThreadInfo> _threadInfos = new List<DownloadThreadInfo>();  //下载线程进度信息
         public string State { get { return _state; } }
 
         public delegate void DownloadProgressChangedEventHandler(object sender, TDownloadProgressChangedEventArgs e);
@@ -38,7 +40,7 @@ namespace NT.Tools
         {
             public int Index { get; set; }
             public long ThreadBytesReceived { get; set; }
-            public long ThreadTotalBytesToReceive { get; set; }
+            public long ThreadBytesToReceive { get; set; }
             public long[] DownloadRange { get; set; }
             public long Position { get; set; }
         }
@@ -53,13 +55,27 @@ namespace NT.Tools
         public void Start()
         {
             _state = "Downloading";
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(_url);
-            HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-            _fileSize = response.ContentLength;
-            long singleFileLength = _fileSize / _threadNum;
-            request.Abort();
-            response.Close();
-            for (int i = 0; i < _threadNum; i++)
+            HttpWebRequest request;
+            HttpWebResponse response;
+            long singleFileLength = 0;
+
+            try
+            {
+                request = (HttpWebRequest)WebRequest.Create(_url);
+                response = (HttpWebResponse)request.GetResponse();
+                _fileSize = response.ContentLength;
+                singleFileLength = _fileSize / _threadNum;
+                request.Abort();
+                response.Close();
+            }
+            catch (Exception e)
+            {
+                _state = "Error";
+                if (DownloadComplete != null)
+                    DownloadComplete(this, new TDownloadCompleteEventArgs(e));
+            }
+
+            for (int i = 0; i < _threadNum; i++)   //分配下载块
             {
                 long[] range = new long[3];
                 range[0] = i * singleFileLength;
@@ -76,6 +92,10 @@ namespace NT.Tools
             }
         }
 
+        /// <summary>
+        /// 参数为 long[] 型, 三个元素分别对应 起始位置,终止位置,线程序号
+        /// </summary>
+        /// <param name="obj"></param>
         private void AsyncDownload(object obj)
         {
             long[] range = (long[])obj;
@@ -83,7 +103,7 @@ namespace NT.Tools
             {
                 Index = (int)range[2],
                 ThreadBytesReceived = 0,
-                ThreadTotalBytesToReceive = range[1] - range[0] + 1,
+                ThreadBytesToReceive = range[1] - range[0] + 1,
                 DownloadRange = range,
                 Position = 0
             };
@@ -91,7 +111,7 @@ namespace NT.Tools
             Stream httpFileStream = null, localFileStream = null;
             try
             {
-                string tempPath = Path.GetTempPath() + Path.GetFileNameWithoutExtension(_url) + ".tmp" + range[2]; //临时文件保存路径
+                string tempPath = Path.GetTempPath() + Path.GetFileNameWithoutExtension(_url) + ".tmp" + range[2];   //临时文件保存路径
 
                 lock (locker)
                 {
@@ -108,7 +128,7 @@ namespace NT.Tools
                     }
                 }
                 bool createStream = false;
-                while (!createStream) //新建文件流
+                while (!createStream)   //创建文件流
                 {
                     try
                     {
@@ -117,7 +137,7 @@ namespace NT.Tools
                             localFileStream = new FileStream(tempPath, FileMode.Open);
                             localFileStream.Position = localFileStream.Length;
                             info.ThreadBytesReceived = localFileStream.Length;
-                            lock (locker) _downloadSize += localFileStream.Length;
+                            lock (locker) _downloadedSize += localFileStream.Length;
                         }
                         else
                         {
@@ -141,13 +161,13 @@ namespace NT.Tools
                 while (getByteSize > 0 && !_cancel && !_pause)
                 {
                     Thread.Sleep(20);
-                    lock (locker) _downloadSize += getByteSize; //统计总共下载量
+                    lock (locker) _downloadedSize += getByteSize; //统计总共下载量
                     info.ThreadBytesReceived += getByteSize; //统计此线程下载量
                     localFileStream.Write(by, 0, getByteSize);
                     getByteSize = httpFileStream.Read(by, 0, (int)by.Length);
                     info.Position = localFileStream.Position;
                     if (DownloadProgressChanged != null)
-                        DownloadProgressChanged(this, new TDownloadProgressChangedEventArgs((int)range[2], (float)_downloadSize / (float)_fileSize, _downloadSize, _fileSize, (float)info.ThreadBytesReceived / (float)info.ThreadTotalBytesToReceive, info.ThreadBytesReceived, info.ThreadTotalBytesToReceive));
+                        DownloadProgressChanged(this, new TDownloadProgressChangedEventArgs((int)range[2], (float)_downloadedSize / (float)_fileSize, _downloadedSize, _fileSize, (float)info.ThreadBytesReceived / (float)info.ThreadBytesToReceive, info.ThreadBytesReceived, info.ThreadBytesToReceive));
                 }
                 lock (locker) _threads.Remove(Thread.CurrentThread);
                 if (!_cancel && !_pause)
@@ -158,9 +178,11 @@ namespace NT.Tools
                         ThreadDownloadComplete(this, new TDownloadCompleteEventArgs((int)range[2]));
                 }
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                throw new Exception(ex.Message.ToString());
+                _state = "Error";
+                if (DownloadComplete != null)
+                    DownloadComplete(this, new TDownloadCompleteEventArgs(e));
             }
             finally
             {
