@@ -188,15 +188,23 @@ namespace NT.Tools
             {
                 for (int x = 0; x < _threadNum; x++)
                 {
-                    if (_tempFiles[x].EndsWith(i.ToString()))
+                    string index = Path.GetExtension(_tempFiles[x]).Replace(".tmp", "");
+                    if (index == i.ToString())
                     {
-                        using (FileStream fs = new FileStream(_tempFiles[x], FileMode.Open))
+                        bool createSucess = false;
+                        try
                         {
-                            BinaryReader TempReader = new BinaryReader(fs);
-                            br.Write(TempReader.ReadBytes((int)fs.Length));
-                            TempReader.Close();
+                            while (!createSucess)
+                            {
+                                FileStream fs = new FileStream(_tempFiles[x], FileMode.Open);
+                                createSucess = true;
+                                BinaryReader TempReader = new BinaryReader(fs);
+                                br.Write(TempReader.ReadBytes((int)fs.Length));
+                                TempReader.Close();
+                                File.Delete(_tempFiles[x]);
+                            }
                         }
-                        File.Delete(_tempFiles[x]);
+                        catch { }
                     }
                 }
             }
