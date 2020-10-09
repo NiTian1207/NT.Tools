@@ -12,6 +12,7 @@ namespace NT.Tools
     {
         int _downloadNum = 1;
         int _downloadingNum = 0;
+        object locker = new object();
         /// <summary>
         /// 同时下载量
         /// </summary>
@@ -40,11 +41,8 @@ namespace NT.Tools
             public string Url { get; set; }
             public string SavePath { get; set; }
             public int ThreadNum { get; set; }
-            public bool Completed { get { return _completed; } }
-            public bool IsPaused { get { return _isPaused; } }
             public bool CanResume { get; set; }
-            private bool _completed;
-            private bool _isPaused;
+            public string State { get; }
         }
         #region 事件
         private void Md_DownloadError(object sender, TDownloadCompleteEventArgs e)
@@ -101,7 +99,6 @@ namespace NT.Tools
                 md.ThreadDownloadComplete += Md_ThreadDownloadComplete;
                 md.DownloadError += Md_DownloadError;
                 downloads.Add(md);
-
             }
         }
 
@@ -156,18 +153,45 @@ namespace NT.Tools
         }
 
         public void Pause(string SavePath)
-        { 
-            
+        {
+            lock (locker)
+            {
+                foreach (MultiDownload md in downloads)
+                {
+                    if (md.SavePath == SavePath)
+                    {
+                        md.Pause();
+                    }
+                }
+            }
         }
 
         public void Continue(string SavePath)
         {
-
+            lock (locker)
+            {
+                foreach (MultiDownload md in downloads)
+                {
+                    if (md.SavePath == SavePath)
+                    {
+                        md.Continue();
+                    }
+                }
+            }
         }
 
         public void Cancel(string SavePath)
         {
-
+            lock (locker)
+            {
+                foreach (MultiDownload md in downloads)
+                {
+                    if (md.SavePath == SavePath)
+                    {
+                        md.Cancel();
+                    }
+                }
+            }
         }
     }
 
