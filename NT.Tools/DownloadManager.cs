@@ -211,6 +211,7 @@ namespace NT.Tools
         bool _cancel = false;
         bool _pause = false;
         bool _resume = true;
+        DateTime _startTime = new DateTime();
         List<Thread> _threads = new List<Thread>();   //下载线程组
         List<string> _tempFiles = new List<string>();   //临时文件保存路径
         List<string> _uncompleteFiles = new List<string>();   //未下载完成的临时文件保存路径
@@ -262,6 +263,7 @@ namespace NT.Tools
             _resume = canResume;
             Start();
         }
+
         public void Start()
         {
             if (string.IsNullOrEmpty(_url) || string.IsNullOrEmpty(_savePath))
@@ -289,6 +291,7 @@ namespace NT.Tools
                     DownloadError(this, new TDownloadCompleteEventArgs(_url, _savePath, e));
             }
 
+            string rand = Guid.NewGuid().ToString().Substring(0, 4);
             for (int i = 0; i < _threadNum; i++)   //分配下载块
             {
                 long[] range = new long[3];
@@ -302,23 +305,20 @@ namespace NT.Tools
                 _ranges.Add(range);
                 Thread t = new Thread(new ParameterizedThreadStart(AsyncDownload));
                 _threads.Add(t);
-                t.Start(range);
+                t.Start((range, rand));
+                _startTime = DateTime.UtcNow;
             }
         }
 
-        private string GetTimeStamp()
-        {
-            TimeSpan ts = DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, 0);
-            return Convert.ToInt64(ts.TotalMilliseconds).ToString();
-        }
-
         /// <summary>
-        /// 参数为 long[] 型, 三个元素分别对应 起始位置,终止位置,线程序号
+        /// 参数为 元组 型, (long[],string) long[] 三个元素分别对应 起始位置,终止位置,线程序号 还有一个string 对应四位随机码
         /// </summary>
         /// <param name="obj"></param>
         private void AsyncDownload(object obj)
         {
-            long[] range = (long[])obj;
+            TimeSpan ts = DateTime.UtcNow - _startTime;
+            ValueTuple<long[], string> param = (ValueTuple<long[], string>)obj;
+            long[] range = param.Item1;
             DownloadThreadInfo info = new DownloadThreadInfo()
             {
                 Index = (int)range[2],
@@ -331,7 +331,35 @@ namespace NT.Tools
             Stream httpFileStream = null, localFileStream = null;
             try
             {
-                string tempPath = Path.GetTempPath() + Path.GetFileNameWithoutExtension(_url) + Guid.NewGuid().ToString().Substring(0, 4) + ".tmp" + range[2];   //临时文件保存路径
+                List<int> list = new List<int>();
+                List<string> olist = new List<string>();
+                foreach (string s in Directory.GetFiles(Path.GetTempPath()))
+                {
+                    if (s.IndexOf(Path.GetFileNameWithoutExtension(_url)) != -1 && olist.IndexOf(Path.GetFileNameWithoutExtension(s)) == -1)
+                    {
+                        olist.Add(Path.GetFileNameWithoutExtension(s));
+                        int i = 0;
+                        foreach (string ss in Directory.GetFiles(Path.GetTempPath()))
+                        {
+                            if (ss.IndexOf(Path.GetFileNameWithoutExtension(s)) != -1)
+                            {
+                                i++;
+                            }
+                        }
+                        list.Add(i);
+                    }
+                }
+
+                string rand = param.Item2;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (_threadNum == list[i])
+                    {
+                        rand = olist[i].Substring(olist[i].IndexOf(Path.GetFileNameWithoutExtension(_url)) + Path.GetFileNameWithoutExtension(_url).Length, 4);
+                        break;
+                    }
+                }
+                string tempPath = Path.GetTempPath() + Path.GetFileNameWithoutExtension(_url) + rand + ".tmp" + range[2];   //临时文件保存路径
 
                 lock (locker)
                 {
@@ -395,7 +423,7 @@ namespace NT.Tools
                     getByteSize = httpFileStream.Read(by, 0, (int)by.Length);
                     info.Position = localFileStream.Position;
                     if (DownloadProgressChanged != null)
-                        DownloadProgressChanged(this, new TDownloadProgressChangedEventArgs(_url, _savePath, (int)range[2], (float)_downloadedSize / (float)_fileSize, _downloadedSize, _fileSize, (float)info.ThreadBytesReceived / (float)info.ThreadBytesToReceive, info.ThreadBytesReceived, info.ThreadBytesToReceive));
+                        DownloadProgressChanged(this, new TDownloadProgressChangedEventArgs(_url, _savePath, (int)range[2], (float)_downloadedSize / (float)_fileSize, _downloadedSize, _fileSize, (float)info.ThreadBytesReceived / (float)info.ThreadBytesToReceive, info.ThreadBytesReceived, info.ThreadBytesToReceive, (float.Parse(info.ThreadBytesReceived.ToString()) / 1024) / float.Parse(ts.TotalSeconds.ToString())));
                 }
                 lock (locker) _threads.Remove(Thread.CurrentThread);
                 if (!_cancel && !_pause)
