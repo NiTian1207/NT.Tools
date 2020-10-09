@@ -422,8 +422,9 @@ namespace NT.Tools
                     localFileStream.Write(by, 0, getByteSize);
                     getByteSize = httpFileStream.Read(by, 0, (int)by.Length);
                     info.Position = localFileStream.Position;
+                    ts = DateTime.UtcNow - _startTime;
                     if (DownloadProgressChanged != null)
-                        DownloadProgressChanged(this, new TDownloadProgressChangedEventArgs(_url, _savePath, (int)range[2], (float)_downloadedSize / (float)_fileSize, _downloadedSize, _fileSize, (float)info.ThreadBytesReceived / (float)info.ThreadBytesToReceive, info.ThreadBytesReceived, info.ThreadBytesToReceive, (float.Parse(info.ThreadBytesReceived.ToString()) / 1024) / float.Parse(ts.TotalSeconds.ToString())));
+                        DownloadProgressChanged(this, new TDownloadProgressChangedEventArgs(_url, _savePath, (int)range[2], (float)_downloadedSize / (float)_fileSize, _downloadedSize, _fileSize, (float)info.ThreadBytesReceived / (float)info.ThreadBytesToReceive, info.ThreadBytesReceived, info.ThreadBytesToReceive, (float.Parse(_downloadedSize.ToString()) / 1024) / float.Parse(ts.TotalSeconds.ToString())));
                 }
                 lock (locker) _threads.Remove(Thread.CurrentThread);
                 if (!_cancel && !_pause)
