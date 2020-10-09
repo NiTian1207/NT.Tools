@@ -6,7 +6,7 @@ namespace NT.Tools
 {
     public class TDownloadProgressChangedEventArgs : EventArgs
     {
-        public TDownloadProgressChangedEventArgs(int threadIndex, float totalProgressPercentage, long totalBytesReceived, long totalBytesToReceive, float threadProgressPercentage, long threadBytesReceived, long threadTotalBytesToReceive)
+        public TDownloadProgressChangedEventArgs(string url, string savePath, int threadIndex, float totalProgressPercentage, long totalBytesReceived, long totalBytesToReceive, float threadProgressPercentage, long threadBytesReceived, long threadTotalBytesToReceive)
         {
             TotalProgressPercentage = totalProgressPercentage;
             TotalBytesReceived = totalBytesReceived;
@@ -15,7 +15,11 @@ namespace NT.Tools
             ThreadIndex = threadIndex;
             ThreadBytesReceived = threadBytesReceived;
             ThreadTotalBytesToReceive = threadTotalBytesToReceive;
+            Url = url;
+            SavePath = savePath;
         }
+        public string Url { get; }
+        public string SavePath { get; }
         /// <summary>
         /// 总文件下载百分比
         /// </summary>
