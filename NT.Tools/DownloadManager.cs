@@ -23,10 +23,12 @@ namespace NT.Tools
         public delegate void DownloadCompleteEventHandler(object sender, TDownloadCompleteEventArgs e);
         public delegate void ThreadDownloadCompleteEventHandler(object sender, TDownloadCompleteEventArgs e);
         public delegate void DownloadErrorEventHandler(object sender, TDownloadCompleteEventArgs e);
+        public delegate void NewDownloadEventHandler(object sender, NewDownloadEventArgs e);
         public event DownloadProgressChangedEventHandler DownloadProgressChanged;
         public event DownloadCompleteEventHandler DownloadComplete;
         public event ThreadDownloadCompleteEventHandler ThreadDownloadComplete;
         public event DownloadErrorEventHandler DownloadError;
+        public event NewDownloadEventHandler NewDownload;
 
 
         public class DownloadItem
@@ -143,6 +145,8 @@ namespace NT.Tools
                     {
                         if (md.State == "Free")
                         {
+                            if (NewDownload != null)
+                                NewDownload(this, new NewDownloadEventArgs(md.Url, md.SavePath, md.ThreadNum));
                             md.Start();
                             _downloadingNum++;
                             break;
@@ -200,6 +204,7 @@ namespace NT.Tools
     /// </summary>
     public class MultiDownload
     {
+        IWebProxy _proxy;
         string _url;   //下载链接
         string _savePath;   //文件保存绝对路径
         string _state = "Free";   //下载状态
@@ -223,6 +228,8 @@ namespace NT.Tools
         public string State { get { return _state; } }
         public string SavePath { get { return _savePath; } }
         public string Url { get { return _url; } }
+        public int ThreadNum { get { return _threadNum; } }
+        public IWebProxy Proxy { get { return _proxy; } set { _proxy = value; } }
 
         public delegate void DownloadProgressChangedEventHandler(object sender, TDownloadProgressChangedEventArgs e);
         public delegate void DownloadCompleteEventHandler(object sender, TDownloadCompleteEventArgs e);
@@ -232,6 +239,7 @@ namespace NT.Tools
         public event DownloadCompleteEventHandler DownloadComplete;
         public event ThreadDownloadCompleteEventHandler ThreadDownloadComplete;
         public event DownloadErrorEventHandler DownloadError;
+
 
         private class DownloadThreadInfo
         {
@@ -248,6 +256,7 @@ namespace NT.Tools
             _savePath = savePath;
             _threadNum = threadNum;
             _resume = canResume;
+            _proxy = WebRequest.GetSystemWebProxy();
         }
 
         public MultiDownload()
@@ -278,6 +287,7 @@ namespace NT.Tools
             try
             {
                 request = (HttpWebRequest)WebRequest.Create(_url);
+                request.Proxy = _proxy;
                 response = (HttpWebResponse)request.GetResponse();
                 _fileSize = response.ContentLength;
                 singleFileLength = _fileSize / _threadNum;
