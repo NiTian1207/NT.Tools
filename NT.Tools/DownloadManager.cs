@@ -17,7 +17,8 @@ namespace NT.Tools
         /// 同时下载量
         /// </summary>
         public int DownloadNum { set { _downloadNum = value; } get { return _downloadNum; } }
-        List<MultiDownload> downloads = new List<MultiDownload>();   //下载对象
+        public List<MultiDownload> CurrentDownloadItems { get { return _currentDownloadItems; } }
+        List<MultiDownload> _currentDownloadItems = new List<MultiDownload>();   //下载对象
 
         public delegate void DownloadProgressChangedEventHandler(object sender, TDownloadProgressChangedEventArgs e);
         public delegate void DownloadCompleteEventHandler(object sender, TDownloadCompleteEventArgs e);
@@ -50,11 +51,11 @@ namespace NT.Tools
         private void Md_DownloadError(object sender, TDownloadCompleteEventArgs e)
         {
             _downloadingNum--;
-            for (int i = 0; i < downloads.Count; i++)
+            for (int i = 0; i < _currentDownloadItems.Count; i++)
             {
-                if (downloads[i].SavePath == e.SavePath)
+                if (_currentDownloadItems[i].SavePath == e.SavePath)
                 {
-                    downloads.RemoveAt(i);
+                    _currentDownloadItems.RemoveAt(i);
                     break;
                 }
             }
@@ -65,11 +66,11 @@ namespace NT.Tools
         private void Md_ThreadDownloadComplete(object sender, TDownloadCompleteEventArgs e)
         {
             _downloadingNum--;
-            for (int i = 0; i < downloads.Count; i++)
+            for (int i = 0; i < _currentDownloadItems.Count; i++)
             {
-                if (downloads[i].SavePath == e.SavePath)
+                if (_currentDownloadItems[i].SavePath == e.SavePath)
                 {
-                    downloads.RemoveAt(i);
+                    _currentDownloadItems.RemoveAt(i);
                     break;
                 }
             }
@@ -100,7 +101,7 @@ namespace NT.Tools
                 md.DownloadComplete += Md_DownloadComplete;
                 md.ThreadDownloadComplete += Md_ThreadDownloadComplete;
                 md.DownloadError += Md_DownloadError;
-                downloads.Add(md);
+                _currentDownloadItems.Add(md);
             }
         }
 
@@ -111,7 +112,7 @@ namespace NT.Tools
             md.DownloadComplete += Md_DownloadComplete;
             md.ThreadDownloadComplete += Md_ThreadDownloadComplete;
             md.DownloadError += Md_DownloadError;
-            downloads.Add(md);
+            _currentDownloadItems.Add(md);
         }
 
         public void Start()
@@ -127,21 +128,21 @@ namespace NT.Tools
             md.DownloadComplete += Md_DownloadComplete;
             md.ThreadDownloadComplete += Md_ThreadDownloadComplete;
             md.DownloadError += Md_DownloadError;
-            downloads.Add(md);
+            _currentDownloadItems.Add(md);
         }
 
         public void DeletItem(DownloadItem downloadItem)
         {
-            downloads.Remove(new MultiDownload(downloadItem.Url, downloadItem.SavePath, downloadItem.ThreadNum, downloadItem.CanResume));
+            _currentDownloadItems.Remove(new MultiDownload(downloadItem.Url, downloadItem.SavePath, downloadItem.ThreadNum, downloadItem.CanResume));
         }
 
         private void Download()
         {
             while (true)
             {
-                if (_downloadingNum < _downloadNum && _downloadNum < downloads.Count)
+                if (_downloadingNum < _downloadNum && _downloadNum < _currentDownloadItems.Count)
                 {
-                    foreach (MultiDownload md in downloads)
+                    foreach (MultiDownload md in _currentDownloadItems)
                     {
                         if (md.State == "Free")
                         {
@@ -160,7 +161,7 @@ namespace NT.Tools
         {
             lock (locker)
             {
-                foreach (MultiDownload md in downloads)
+                foreach (MultiDownload md in _currentDownloadItems)
                 {
                     if (md.SavePath == SavePath)
                     {
@@ -174,7 +175,7 @@ namespace NT.Tools
         {
             lock (locker)
             {
-                foreach (MultiDownload md in downloads)
+                foreach (MultiDownload md in _currentDownloadItems)
                 {
                     if (md.SavePath == SavePath)
                     {
@@ -188,7 +189,7 @@ namespace NT.Tools
         {
             lock (locker)
             {
-                foreach (MultiDownload md in downloads)
+                foreach (MultiDownload md in _currentDownloadItems)
                 {
                     if (md.SavePath == SavePath)
                     {
@@ -207,7 +208,7 @@ namespace NT.Tools
         IWebProxy _proxy;
         string _url;   //下载链接
         string _savePath;   //文件保存绝对路径
-        string _state = "Free";   //下载状态
+        string _state = "Free";   //下载状态 Downloading Paused Cancelled Error
         int _threadNum = 8;   //线程数
         int _threadCompleteNum;   //完成线程数
         long _fileSize;   //文件大小
@@ -261,7 +262,6 @@ namespace NT.Tools
 
         public MultiDownload()
         {
-
         }
 
         public void Start(string url, string savePath, int threadNum = 8, bool canResume = true)
